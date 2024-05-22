@@ -1,25 +1,38 @@
 import React, { useState, useEffect } from 'react';
+import './App.css';
 
-const Leaderboard = () => {
+const Leaderboard = ({ showLeaderboard, setShowLeaderboard }) => {
   const [leaderboardData, setLeaderboardData] = useState({});
 
   useEffect(() => {
     const leaderboard = localStorage.getItem('leaderboard');
     if (leaderboard) {
-      setLeaderboardData(JSON.parse(leaderboard));
+      const parsedLeaderboard = JSON.parse(leaderboard);
+      // Tri des joueurs selon la difficulté et le nombre de tentatives
+      const sortedLeaderboard = {};
+      Object.keys(parsedLeaderboard).forEach((difficulty) => {
+        sortedLeaderboard[difficulty] = parsedLeaderboard[difficulty].sort((a, b) => {
+          if (a.attempts === b.attempts) {
+            return 0;
+          }
+          return a.attempts < b.attempts ? -1 : 1;
+        });
+      });
+      setLeaderboardData(sortedLeaderboard);
     }
   }, []);
-
+//Affiche le classement
   return (
     <div>
       <h2>Leaderboard</h2>
+      <button onClick={() => setShowLeaderboard(!showLeaderboard)}>Retour au jeu</button>
       {Object.entries(leaderboardData).map(([difficulty, players]) => (
         <div key={difficulty}>
           <h3>{difficulty}</h3>
           <ul>
             {players.map((player, index) => (
               <li key={index}>
-                {player.username} - {player.attempts} attempts
+                {index + 1}. {player.username} - {player.attempts} attempts
               </li>
             ))}
           </ul>
@@ -38,7 +51,26 @@ const Game = () => {
   const [guess, setGuess] = useState('');
   const [attempts, setAttempts] = useState(0);
   const [leaderboardData, setLeaderboardData] = useState({});
+  const [gameStarted, setGameStarted] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
+  // Fonction pour démarrer le jeu
+  const startGame = () => {
+    if (username === '') {
+      setError('Veuillez entrer un nom d\'utilisateur.');
+      return;
+    }
+    setError('');
+    setGameStarted(true);
+    setRandomNumber(generateRandomNumber(intervalStart, intervalEnd));
+    setAttempts(0);
+    setGuess('');
+    setMessage('');
+  };
+
+  // Charger le leaderboard depuis le stockage local
   useEffect(() => {
     const leaderboard = localStorage.getItem('leaderboard');
     if (leaderboard) {
@@ -46,10 +78,37 @@ const Game = () => {
     }
   }, []);
 
+  // Mettre à jour le nombre aléatoire lorsqu'on change les intervalles
   useEffect(() => {
     setRandomNumber(generateRandomNumber(intervalStart, intervalEnd));
   }, [intervalStart, intervalEnd]);
 
+  // Fonction pour générer un nombre aléatoire dans un intervalle
+  const generateRandomNumber = (start, end) => {
+    return Math.floor(Math.random() * (end - start + 1)) + start;
+  };
+
+  //Gestion des tentatives
+  const getAttemptsLimit = (difficulty, intervalStart, intervalEnd) => {
+    const minValue = intervalStart;
+    const maxValue = intervalEnd;
+    const easyAttempts = Math.floor(Math.log2(maxValue - minValue )+ 1);
+    const hardAttempts = Math.floor(easyAttempts / 2);
+    const mediumAttempts = Math.floor((easyAttempts + hardAttempts) / 2);
+  
+    switch (difficulty) {
+      case 'easy':
+        return easyAttempts;
+      case 'medium':
+        return mediumAttempts;
+      case 'hard':
+        return hardAttempts;
+      default:
+        return easyAttempts;
+    }
+  };
+
+  // Gestion des changements de valeur des inputs
   const handleUsernameChange = (e) => {
     setUsername(e.target.value);
   };
@@ -70,6 +129,7 @@ const Game = () => {
     setGuess(e.target.value);
   };
 
+  // Gestion de la soumission du formulaire de devinette
   const handleGuessSubmit = (e) => {
     e.preventDefault();
     if (guess === '') {
@@ -79,6 +139,7 @@ const Game = () => {
     setAttempts(attempts + 1);
 
     if (Number(guess) === randomNumber) {
+      // Ajouter le joueur au leaderboard
       const updatedLeaderboard = {
         ...leaderboardData,
         [difficulty]: [
@@ -93,72 +154,80 @@ const Game = () => {
       setUsername('');
       setGuess('');
       setAttempts(0);
+      setGameStarted(false);
+      setMessage('Félicitations! Vous avez deviné le bon nombre!');
     } else {
-      if (attempts === getAttemptsLimit(difficulty)) {
-        alert('You reached the attempts limit!');
+      if (attempts + 1 === getAttemptsLimit(difficulty)) {
+        alert('Vous avez atteint la limite des tentatives!');
         setGuess('');
         setAttempts(0);
+        setGameStarted(false);
       } else {
-        const message = Number(guess) < randomNumber ? 'Try a higher number!' : 'Try a lower number!';
-        alert(message);
+        const message = Number(guess) < randomNumber ? 'Essayez un nombre plus grand!' : 'Essayez un nombre plus petit!';
+        setMessage(message);
         setGuess('');
       }
     }
   };
 
-  const generateRandomNumber = (start, end) => {
-    return Math.floor(Math.random() * (end - start + 1)) + start;
-  };
-
-  const getAttemptsLimit = (difficulty) => {
-    switch (difficulty) {
-      case 'easy':
-        return 8;
-      case 'medium':
-        return 6;
-      case 'hard':
-        return 4;
-      default:
-        return 8;
-    }
-  };
-
   return (
     <div>
-      <h2>Guess the Number</h2>
-      <form onSubmit={handleGuessSubmit}>
-        <label>
-          Username:
-          <input type="text" value={username} onChange={handleUsernameChange} />
-        </label>
-        <br />
-        <label>
-          Difficulty:
-          <select value={difficulty} onChange={handleDifficultyChange}>
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-        </label>
-        <br />
-        <label>
-          Interval Start:
-          <input type="number" value={intervalStart} onChange={handleIntervalStartChange} />
-        </label>
-        <br />
-        <label>
-          Interval End:
-          <input type="number" value={intervalEnd} onChange={handleIntervalEndChange} />
-        </label>
-        <br />
-        <label>
-          Guess:
-          <input type="number" value={guess} onChange={handleGuessChange} />
-        </label>
-        <br />
-        <button type="submit">Submit</button>
-      </form>
-      <Leaderboard />
+      <center>
+        <h1>Bienvenue au jeu GET THE NUMBER GAME🎮👾</h1>
+        <h2>Surpassez-vous en devinant le nombre secret qui se cache derrière notre système !</h2>
+      </center>
+      {!gameStarted && !showLeaderboard && (
+        <center>
+          <div className="startgame">
+            {error && <p className="error">{error}</p>}
+            <label>
+              Nom d'utilisateur:
+              <input type="text" value={username} onChange={handleUsernameChange} />
+            </label>
+            <br /><br />
+            <label>
+              Difficulté:
+              <select value={difficulty} onChange={handleDifficultyChange}>
+                <option value="easy">Facile</option>
+                <option value="medium">Moyenne</option>
+                <option value="hard">Difficile</option>
+              </select>
+            </label>
+            <br /><br />
+            <label>
+              Intervalle de départ:
+              <input type="number" value={intervalStart} onChange={handleIntervalStartChange} />
+            </label>
+            <br /><br />
+            <label>
+              Intervalle de fin:
+              <input type="number" value={intervalEnd} onChange={handleIntervalEndChange} />
+            </label>
+            <br /><br /><center>
+            <button onClick={startGame}>JOUER</button>
+            <br /><br />
+            <button onClick={() => setShowLeaderboard(true)}>Voir le tableau des scores</button></center>
+          </div>
+        </center>
+      )}
+      {gameStarted && (
+        <center>
+          <div className="jeu">
+            <form onSubmit={handleGuessSubmit}>
+              <label>
+                Devinette:
+                <input type="number" value={guess} onChange={handleGuessChange} />
+              </label>
+              <br />
+              <center><button type="submit">Soumettre</button></center>
+            </form>
+            <p>{message}</p>
+          </div>
+        </center>
+      )}
+      {showLeaderboard && (
+        <Leaderboard showLeaderboard={showLeaderboard} setShowLeaderboard={setShowLeaderboard} />
+      )}
     </div>
   );
 };
